@@ -1,2 +1,2 @@
-# fake-news
-basically it's an fake news detector and generator
+# fakenews
+we can basically detect fake news and generate fake story .

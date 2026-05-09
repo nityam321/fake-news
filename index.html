@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FakeNews AI — Generator & Detector</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:      #0d0d0d;
+  --paper:    #f5efe3;
+  --cream:    #ede7d9;
+  --red:      #bf1120;
+  --red-dark: #7a0b15;
+  --gold:     #c9973a;
+  --muted:    #7a7060;
+  --rule:     #ccc5b8;
+  --white:    #ffffff;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'DM Mono', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* scanlines */
+body::after {
+  content:'';
+  position:fixed;
+  inset:0;
+  background: repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.018) 3px,rgba(0,0,0,.018) 4px);
+  pointer-events:none;
+  z-index:9999;
+}
+
+/* ── TICKER ── */
+.ticker-bar {
+  background: var(--red);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  height: 34px;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: 500;
+}
+
+.ticker-label {
+  background: var(--ink);
+  color: #fff;
+  font-family: 'Bebas Neue',sans-serif;
+  font-size: 14px;
+  letter-spacing: .18em;
+  padding: 0 18px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.blink {
+  display:inline-block;
+  width:8px;height:8px;
+  background:var(--red);
+  border-radius:50%;
+  animation:blink 1s step-end infinite;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+.ticker-track{flex:1;overflow:hidden;height:100%;display:flex;align-items:center}
+
+.ticker-inner {
+  display:flex;
+  white-space:nowrap;
+  animation:ticker 32s linear infinite;
+  font-size:11px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+.ticker-inner span{padding:0 48px}
+.ticker-inner span::before{content:'✦  ';opacity:.7}
+@keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* ── MASTHEAD ── */
+.masthead {
+  background: var(--paper);
+  border-bottom: 4px double var(--ink);
+  padding: 0 40px;
+}
+
+.masthead-meta {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 9.5px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.meta-badge {
+  background:var(--ink);
+  color:var(--paper);
+  padding:3px 10px;
+  font-size:9px;
+  letter-spacing:.25em;
+}
+
+.masthead-center {
+  text-align:center;
+  padding:22px 0 14px;
+  position:relative;
+}
+.masthead-center::before,
+.masthead-center::after {
+  content:'';
+  position:absolute;
+  top:50%;
+  width:calc(50% - 270px);
+  height:1px;
+  background:var(--rule);
+}
+.masthead-center::before{left:0}
+.masthead-center::after{right:0}
+
+.site-title {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:clamp(64px,11vw,128px);
+  letter-spacing:.06em;
+  line-height:.88;
+  display:inline-block;
+  position:relative;
+}
+.word-fake{color:var(--ink)}
+.word-news{color:var(--red);position:relative}
+.word-news::before {
+  content:'NEWS';
+  position:absolute;
+  top:0;left:0;
+  color:var(--gold);
+  clip-path:inset(30% 0 50% 0);
+  animation:glitch 7s 3s infinite;
+}
+@keyframes glitch{
+  0%,93%,100%{transform:none;opacity:0}
+  94%{transform:translate(-3px,1px) skewX(-5deg);opacity:.8}
+  96%{transform:translate(3px,-1px) skewX(3deg);opacity:.6}
+  98%{transform:translate(-1px,2px);opacity:.4}
+}
+
+.ai-pill {
+  display:inline-block;
+  background:var(--red);
+  color:#fff;
+  font-family:'DM Mono',monospace;
+  font-size:9px;
+  letter-spacing:.2em;
+  padding:3px 10px;
+  margin-left:10px;
+  vertical-align:middle;
+  position:relative;
+  top:-3px;
+}
+
+.site-subtitle {
+  font-family:'Playfair Display',serif;
+  font-style:italic;
+  font-size:13px;
+  color:var(--muted);
+  letter-spacing:.08em;
+  margin-top:8px;
+}
+
+.masthead-ribbon {
+  display:flex;align-items:center;gap:14px;
+  padding:7px 0 10px;
+  font-size:9px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);
+}
+.masthead-ribbon::before,.masthead-ribbon::after{content:'';flex:1;height:1px;background:var(--rule)}
+
+/* ── PAGE ── */
+.page {
+  display:grid;
+  grid-template-columns:1fr min(780px,100%) 1fr;
+  padding:0 16px;
+}
+.page>*{grid-column:2}
+.container{padding:42px 0 80px}
+
+/* ── HOW-IT-WORKS STRIP ── */
+.how-strip {
+  display:flex;
+  border:1px solid var(--rule);
+  margin-bottom:36px;
+  background:var(--white);
+}
+.how-item {
+  flex:1;
+  padding:16px 16px;
+  border-right:1px solid var(--rule);
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+}
+.how-item:last-child{border-right:none}
+.how-num {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:38px;
+  color:var(--rule);
+  line-height:1;
+  flex-shrink:0;
+}
+.how-text strong {
+  display:block;
+  font-size:9px;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--ink);
+  margin-bottom:3px;
+}
+.how-text p{font-size:10px;color:var(--muted);line-height:1.5;letter-spacing:.02em}
+
+/* ── FORM PANEL ── */
+.form-panel {
+  border:1px solid var(--ink);
+  box-shadow:5px 5px 0 var(--ink);
+  background:var(--white);
+  margin-bottom:36px;
+}
+
+.form-cols {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  border-bottom:1px solid var(--rule);
+}
+.form-col {
+  padding:20px 22px;
+}
+.form-col:first-child{border-right:1px solid var(--rule)}
+
+.col-label {
+  font-size:8.5px;
+  letter-spacing:.3em;
+  text-transform:uppercase;
+  color:var(--muted);
+  margin-bottom:10px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.col-label::before{content:'';display:inline-block;width:6px;height:6px;background:var(--gold)}
+
+.form-col p {
+  font-size:10.5px;
+  color:var(--muted);
+  line-height:1.65;
+  letter-spacing:.02em;
+}
+
+.textarea-row {
+  padding:20px 22px;
+  border-bottom:1px solid var(--rule);
+}
+
+textarea {
+  width:100%;
+  background:var(--cream);
+  border:1px solid var(--rule);
+  border-radius:0;
+  padding:16px 18px;
+  font-family:'DM Mono',monospace;
+  font-size:12.5px;
+  color:var(--ink);
+  resize:vertical;
+  min-height:120px;
+  outline:none;
+  transition:border-color .15s,box-shadow .15s;
+  line-height:1.75;
+  letter-spacing:.01em;
+}
+textarea::placeholder{color:var(--muted);font-style:italic}
+textarea:focus{border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red);background:#fff}
+
+.btn-row {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+}
+
+button {
+  cursor:pointer;
+  font-family:'DM Mono',monospace;
+  font-size:10.5px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  padding:18px 20px;
+  border:none;
+  border-right:1px solid var(--rule);
+  transition:background .15s,color .15s,letter-spacing .15s;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  font-weight:500;
+  position:relative;
+  overflow:hidden;
+}
+button:last-child{border-right:none}
+button:active{transform:scale(.98)}
+
+.btn-detect{background:var(--ink);color:var(--paper)}
+.btn-detect:hover{letter-spacing:.28em;background:#222}
+
+.btn-generate{background:var(--red);color:#fff}
+.btn-generate:hover{background:var(--red-dark);letter-spacing:.28em}
+
+.btn-ico{font-size:15px;flex-shrink:0}
+
+/* ── SECTION LABEL ── */
+.sec-label {
+  font-size:8.5px;
+  letter-spacing:.32em;
+  text-transform:uppercase;
+  color:var(--muted);
+  margin-bottom:14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.sec-label::after{content:'';flex:1;height:1px;background:var(--rule)}
+
+/* ── RESULTS ── */
+.result-section{animation:fadeUp .4s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* VERDICT */
+.verdict-wrap{margin-bottom:32px}
+.verdict-card {
+  background:var(--white);
+  border:2px solid var(--ink);
+  box-shadow:6px 6px 0 var(--ink);
+  position:relative;
+  overflow:hidden;
+}
+.verdict-card::before {
+  content:'';
+  position:absolute;
+  top:0;left:0;
+  width:6px;
+  height:100%;
+  background:var(--gold);
+}
+.verdict-inner{padding:28px 32px 24px 36px}
+.verdict-eyebrow {
+  font-size:9px;
+  letter-spacing:.35em;
+  text-transform:uppercase;
+  color:var(--muted);
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:12px;
+}
+.verdict-eyebrow::after{content:'';flex:1;height:1px;background:var(--rule)}
+
+.verdict-result {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:clamp(36px,6vw,56px);
+  letter-spacing:.06em;
+  line-height:1;
+  color:var(--ink);
+}
+
+.verdict-sub {
+  margin-top:12px;
+  font-size:10.5px;
+  color:var(--muted);
+  letter-spacing:.06em;
+  display:flex;align-items:center;gap:12px;
+}
+.bar-wrap{flex:1;height:4px;background:var(--cream)}
+.bar-fill{height:100%;width:72%;background:var(--gold);animation:growBar .7s ease both .2s;transform-origin:left}
+@keyframes growBar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* STORY */
+.story-wrap{margin-bottom:32px}
+.story-card{background:var(--white);border:1px solid var(--ink);box-shadow:5px 5px 0 var(--ink);position:relative}
+
+.story-topbar {
+  background:var(--ink);
+  color:var(--paper);
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:stretch;
+}
+.story-topbar-tag {
+  background:var(--red);
+  font-family:'Bebas Neue',sans-serif;
+  font-size:15px;
+  letter-spacing:.15em;
+  padding:10px 18px;
+  display:flex;align-items:center;
+}
+.story-topbar-title {
+  font-family:'Playfair Display',serif;
+  font-style:italic;
+  font-size:13px;
+  padding:10px 16px;
+  display:flex;align-items:center;
+  color:rgba(255,255,255,.7);
+}
+.story-topbar-ai {
+  font-size:9px;letter-spacing:.2em;text-transform:uppercase;
+  color:rgba(255,255,255,.4);
+  padding:10px 16px;
+  display:flex;align-items:center;
+  border-left:1px solid rgba(255,255,255,.1);
+}
+
+.story-columns{display:grid;grid-template-columns:1fr 1fr}
+
+.story-main-col{
+  padding:28px 24px 24px;
+  border-right:1px solid var(--rule);
+}
+
+.story-text {
+  font-family:'Playfair Display',serif;
+  font-size:15px;
+  line-height:1.85;
+  color:#1a1a1a;
+}
+.story-text::first-letter {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:62px;
+  line-height:.78;
+  float:left;
+  margin-right:8px;
+  margin-top:6px;
+  color:var(--red);
+  padding-right:2px;
+}
+
+.story-aside {
+  padding:20px 18px;
+  background:var(--cream);
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
+.aside-stamp {
+  border:3px solid var(--red);
+  color:var(--red);
+  font-family:'Bebas Neue',sans-serif;
+  font-size:26px;
+  letter-spacing:.15em;
+  padding:6px 12px;
+  transform:rotate(-6deg);
+  text-align:center;
+  width:fit-content;
+  margin:0 auto;
+  opacity:.85;
+}
+.aside-meta{
+  font-size:9.5px;
+  letter-spacing:.06em;
+  color:var(--muted);
+  line-height:1.8;
+  border-top:1px solid var(--rule);
+  padding-top:14px;
+}
+.aside-meta strong{
+  display:block;
+  text-transform:uppercase;
+  letter-spacing:.2em;
+  font-size:8.5px;
+  margin-bottom:4px;
+  color:var(--ink);
+}
+
+.story-footer {
+  border-top:1px solid var(--rule);
+  padding:9px 20px;
+  font-size:8.5px;
+  letter-spacing:.18em;
+  color:var(--muted);
+  text-transform:uppercase;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.footer-dot{
+  width:6px;height:6px;
+  background:var(--red);
+  display:inline-block;
+  margin-right:8px;
+  vertical-align:middle;
+  animation:blink 1.4s ease-in-out infinite;
+}
+
+/* ── ORNAMENT ── */
+.page-ornament{
+  text-align:center;
+  font-size:11px;
+  color:var(--rule);
+  letter-spacing:.5em;
+  margin:36px 0 0;
+  font-family:serif;
+}
+
+/* ── RESPONSIVE ── */
+@media(max-width:620px){
+  .masthead{padding:0 16px}
+  .masthead-center::before,.masthead-center::after{display:none}
+  .form-cols{grid-template-columns:1fr}
+  .form-col:first-child{border-right:none;border-bottom:1px solid var(--rule)}
+  .btn-row{grid-template-columns:1fr}
+  button{border-right:none !important;border-top:1px solid var(--rule)}
+  .how-strip{flex-direction:column}
+  .how-item{border-right:none;border-bottom:1px solid var(--rule)}
+  .story-columns{grid-template-columns:1fr}
+  .story-main-col{border-right:none;border-bottom:1px solid var(--rule)}
+}
+</style>
+</head>
+<body>
+
+<!-- TICKER -->
+<div class="ticker-bar">
+  <div class="ticker-label"><span class="blink"></span> BREAKING</div>
+  <div class="ticker-track">
+    <div class="ticker-inner">
+      <span>AI detects misinformation in real time</span>
+      <span>Generative models craft fictional headlines</span>
+      <span>NLP classifier trained on 50,000+ articles</span>
+      <span>New deepfake detection model achieves 94% accuracy</span>
+      <span>Social media platforms tighten AI-content policies</span>
+      <span>AI detects misinformation in real time</span>
+      <span>Generative models craft fictional headlines</span>
+      <span>NLP classifier trained on 50,000+ articles</span>
+      <span>New deepfake detection model achieves 94% accuracy</span>
+      <span>Social media platforms tighten AI-content policies</span>
+    </div>
+  </div>
+</div>
+
+<!-- MASTHEAD -->
+<div class="masthead">
+  <div class="masthead-meta">
+    <span>Est. 2025 — AI Research Division</span>
+    <span class="meta-badge">Digital Edition</span>
+    <span>Truth is relative — allegedly</span>
+  </div>
+  <div class="masthead-center">
+    <div class="site-title">
+      <span class="word-fake">FAKE</span><span class="word-news">NEWS</span>
+    </div>
+    <span class="ai-pill">A.I.</span>
+    <p class="site-subtitle">Generator &amp; Detector — Powered by Natural Language Processing</p>
+  </div>
+  <div class="masthead-ribbon">All the news that's fit to fabricate</div>
+</div>
+
+<!-- PAGE BODY -->
+<div class="page">
+<div class="container">
+
+  <!-- HOW IT WORKS -->
+  <div class="how-strip">
+    <div class="how-item">
+      <div class="how-num">01</div>
+      <div class="how-text">
+        <strong>Enter Text</strong>
+        <p>Paste an article or type a topic into the field below.</p>
+      </div>
+    </div>
+    <div class="how-item">
+      <div class="how-num">02</div>
+      <div class="how-text">
+        <strong>Choose Action</strong>
+        <p>Detect authenticity with NLP or fabricate a story with AI.</p>
+      </div>
+    </div>
+    <div class="how-item">
+      <div class="how-num">03</div>
+      <div class="how-text">
+        <strong>Get Results</strong>
+        <p>Instant verdict or a fully-generated fictional story.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- FORM -->
+  <p class="sec-label">Submit your text</p>
+
+  <form method="POST">
+    <div class="form-panel">
+
+      <div class="form-cols">
+        <div class="form-col">
+          <div class="col-label">Detect Mode</div>
+          <p>Paste a news headline or full article. Our NLP model will classify it as real or fabricated using pattern recognition and linguistic analysis.</p>
+        </div>
+        <div class="form-col">
+          <div class="col-label">Generate Mode</div>
+          <p>Enter any topic or subject. The generative AI will produce a convincing — but completely fictional — news story on demand.</p>
+        </div>
+      </div>
+
+      <div class="textarea-row">
+        <textarea
+          name="input_text"
+          rows="5"
+          placeholder="Paste a news article to detect its authenticity — or enter any topic to generate a fictional story…"
+        ></textarea>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-detect" name="action" value="Detect">
+          <span class="btn-ico">🔍</span>Detect News (NLP)
+        </button>
+        <button class="btn-generate" name="action" value="Generate">
+          <span class="btn-ico">✍️</span>Generate Fake Story
+        </button>
+      </div>
+
+    </div>
+  </form>
+
+  <!-- PREDICTION -->
+  {% if prediction %}
+  <div class="result-section verdict-wrap">
+    <p class="sec-label">NLP Verdict</p>
+    <div class="verdict-card">
+      <div class="verdict-inner">
+        <div class="verdict-eyebrow">Classification result</div>
+        <div class="verdict-result">{{ prediction }}</div>
+        <div class="verdict-sub">
+          <span>Model confidence</span>
+          <div class="bar-wrap"><div class="bar-fill"></div></div>
+          <span>NLP classifier</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- GENERATED STORY -->
+  {% if fake_story %}
+  <div class="result-section story-wrap">
+    <p class="sec-label">AI-Generated Story</p>
+    <div class="story-card">
+
+      <div class="story-topbar">
+        <span class="story-topbar-tag">⚡ Breaking</span>
+        <span class="story-topbar-title">Fabricated Report — For Educational Purposes Only</span>
+        <span class="story-topbar-ai">AI-Generated</span>
+      </div>
+
+      <div class="story-columns">
+        <div class="story-main-col">
+          <div class="story-text">{{ fake_story }}</div>
+        </div>
+        <div class="story-aside">
+          <span class="aside-stamp">FABRICATED</span>
+          <div class="aside-meta">
+            <strong>Source</strong>
+            Generative AI Language Model<br><br>
+            <strong>Classification</strong>
+            Fictional / Synthetic Content<br><br>
+            <strong>Disclaimer</strong>
+            This story was machine-generated and contains no factual information. Do not share or republish as real news.
+          </div>
+        </div>
+      </div>
+
+      <div class="story-footer">
+        <span><span class="footer-dot"></span>Live AI Output</span>
+        <span>⚠ For entertainment &amp; research purposes only</span>
+      </div>
+
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="page-ornament">— ✦ · ✦ · ✦ —</div>
+
+</div>
+</div>
+
+</body>
+</html>
